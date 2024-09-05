@@ -1,10 +1,12 @@
+
+     
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Google 지도 길찾기 예제</title>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBYQwKY89toVNrVHKbBIus_uqj478DUgwI&libraries=places,geometry" async defer></script>
+    <script id="google-maps-api" async defer></script> <!-- API 키를 제거했습니다. -->
     <style>
         #map { 
             width: 100%; 
@@ -305,7 +307,13 @@
         window.addEventListener('load', function() {
             initializeMap();
         });
+
+        function loadGoogleMapsAPI() {
+            var script = document.getElementById('google-maps-api');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places,geometry';  // API 키를 여기에 삽입합니다.
+        }
+
+        loadGoogleMapsAPI();
     </script>
 </body>
 </html>
-
