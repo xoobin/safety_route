@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google 지도 길찾기 예제</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBYQwKY89toVNrVHKbBIus_uqj478DUgwI&libraries=places,geometry" async defer></script>
+    <style>
+        #map { 
+            width: 100%; 
+            height: 500px;
+        }
+        #start-list, #end-list {
+            border: 1px solid #ccc;
+            background: #fff;
+            max-height: 150px;
+            overflow-y: auto;
+            margin: 0;
+            padding: 0;
+            position: absolute;
+            width: calc(100% - 20px);
+            display: none;
+            z-index: 1000;
+        }
+        #start-list li, #end-list li {
+            list-style: none;
+            padding: 10px;
+            cursor: pointer;
+        }
+        #start-list li:hover, #end-list li:hover {
+            background-color: #eee;
+        }
+        #search-route, #current-location-route {
+            cursor: pointer;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h3>출발지와 목적지를 입력하세요:</h3>
+    <div style="position:relative;">
+        <label for="start-input">출발지:</label>
+        <input id="start-input" type="text" placeholder="출발지" autocomplete="off" aria-label="출발지 입력" />
+        <ul id="start-list"></ul>
+    </div>
+    <div style="position:relative;">
+        <label for="end-input">목적지:</label>
+        <input id="end-input" type="text" placeholder="목적지" autocomplete="off" aria-label="목적지 입력" />
+        <ul id="end-list"></ul>
+    </div>
+    <button id="search-route" aria-label="경로 검색">경로 검색</button>
+    <button id="current-location-route" aria-label="현재 위치부터 경로 안내" style="display:none;">현재 위치부터 경로 안내</button>
+    <div id="map"></div>
+    <script>
+        var map;
+        var directionsService;
+        var directionsRenderer;
+        var startCoords, endCoords;
+        var startMarker, endMarker;  // 출발지와 목적지 마커
+        var cctvs = [];
+        var cctvMarkers = [];
+        var routePolyline;
+        var userLocationMarker;
+        var userCurrentLocation;
+
+        function initializeMap() {
+            var mapContainer = document.getElementById('map');
+            var mapOptions = {
+                center: { lat: 37.5665, lng: 126.978 },
+                zoom: 13
+            };
+
+            map = new google.maps.Map(mapContainer, mapOptions);
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+
+            var inputStart = document.getElementById('start-input');
+            var inputEnd = document.getElementById('end-input');
+            var autocompleteStart = new google.maps.places.Autocomplete(inputStart);
+            var autocompleteEnd = new google.maps.places.Autocomplete(inputEnd);
+
+            autocompleteStart.addListener('place_changed', function() {
+                var place = autocompleteStart.getPlace();
+                if (place.geometry) {
+                    startCoords = place.geometry.location;
+                    if (startMarker) {
+                        startMarker.setMap(null); // 기존 마커 제거
+                    }
+                    startMarker = new google.maps.Marker({
+                        position: startCoords,
+                        map: map,
+                        title: '출발지',
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'  // 출발지 마커 빨간색
+                    });
+                    map.setCenter(startCoords);
+                } else {
+                    alert('출발지 정보를 가져올 수 없습니다. 다시 입력해 주세요.');
+                }
+            });
+
+            autocompleteEnd.addListener('place_changed', function() {
+                var place = autocompleteEnd.getPlace();
+                if (place.geometry) {
+                    endCoords = place.geometry.location;
+                    if (endMarker) {
+                        endMarker.setMap(null); // 기존 마커 제거
+                    }
+                    endMarker = new google.maps.Marker({
+                        position: endCoords,
+                        map: map,
+                        title: '목적지',
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'  // 목적지 마커 파란색
+                    });
+                    map.setCenter(endCoords);
+                } else {
+                    alert('목적지 정보를 가져올 수 없습니다. 다시 입력해 주세요.');
+                }
+            });
+
+            document.getElementById('search-route').addEventListener('click', function() {
+                if (!startCoords || !endCoords) {
+                    alert('출발지와 목적지를 선택해 주세요.');
+                    return;
+                }
+
+                findOptimalRoute(startCoords, endCoords);
+                document.getElementById('current-location-route').style.display = 'block';
+            });
+
+            document.getElementById('current-location-route').addEventListener('click', function() {
+                if (userCurrentLocation && endCoords) {
+                    findOptimalRoute(userCurrentLocation, endCoords);
+                } else {
+                    alert('현재 위치를 찾을 수 없습니다. 출발지 근처에 도착한 후에 다시 시도해 주세요.');
+                }
+            });
+
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(function(position) {
+                    var userLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+                    if (!userLocationMarker) {
+                        userLocationMarker = new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            title: '현재 위치',
+                            icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'  // 현재 위치 마커 녹색
+                        });
+                    } else {
+                        userLocationMarker.setPosition(userLocation);
+                    }
+
+                    userCurrentLocation = userLocation;
+
+                    if (startCoords) {
+                        var distance = google.maps.geometry.spherical.computeDistanceBetween(userLocation, startCoords);
+                        document.getElementById('current-location-route').style.display = (distance < 500) ? 'block' : 'none';
+                    }
+                }, function(error) {
+                    console.error('Geolocation 에러:', error);
+                }, {
+                    enableHighAccuracy: true
+                });
+            } else {
+                alert('Geolocation을 지원하지 않습니다.');
+            }
+
+            loadCctvData();
+        }
+
+        function loadCctvData() {
+            fetch('/static/data/cctv.json')  // Django 정적 파일 URL에 맞게 수정
+                .then(response => response.json())
+                .then(data => {
+                    if (data && Array.isArray(data.DATA)) {
+                        cctvs = data.DATA.map(cctv => {
+                            const lat = parseFloat(cctv.wgsxpt);
+                            const lng = parseFloat(cctv.wgsypt);
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                return { lat, lng };
+                            }
+                        }).filter(cctv => cctv !== undefined);
+                    } else {
+                        console.error('CCTV 데이터가 유효하지 않거나 배열이 아닙니다:', data);
+                    }
+                })
+                .catch(error => console.error('CCTV 데이터 로드 실패:', error));
+        }
+
+        function findOptimalRoute(start, end) {
+            var travelModes = [google.maps.TravelMode.DRIVING, google.maps.TravelMode.TRANSIT, google.maps.TravelMode.WALKING];
+            var routes = [];
+            
+            function tryNextMode(modeIndex) {
+                if (modeIndex >= travelModes.length) {
+                    if (routes.length > 0) {
+                        var bestRoute = getRouteWithMostCctvs(routes);
+                        if (bestRoute) {
+                            displayRoute(bestRoute);
+                            displayCctvsOnRoute(bestRoute.route.overview_path);
+                        } else {
+                            alert('CCTV를 찾을 수 있는 경로가 없습니다.');
+                        }
+                    } else {
+                        alert('경로를 찾을 수 없습니다. 다른 장소를 시도해 보세요.');
+                    }
+                    return;
+                }
+
+                var request = {
+                    origin: start,
+                    destination: end,
+                    travelMode: travelModes[modeIndex],
+                    provideRouteAlternatives: true
+                };
+
+                directionsService.route(request, function(result, status) {
+                    console.log('Travel Mode:', travelModes[modeIndex]);
+                    console.log('Directions Service Status:', status);
+                    console.log('Directions Service Result:', result);
+
+                    if (status === 'OK') {
+                        routes = routes.concat(result.routes.map(route => ({
+                            mode: travelModes[modeIndex],
+                            route: route
+                        })));
+                        tryNextMode(modeIndex + 1);
+                    } else {
+                        console.error('경로 요청 실패:', status);
+                        tryNextMode(modeIndex + 1);
+                    }
+                });
+            }
+
+            tryNextMode(0);
+        }
+
+        function getRouteWithMostCctvs(routes) {
+            var bestRoute = null;
+            var maxCctvs = 0;
+
+            routes.forEach(route => {
+                var cctvsOnRoute = cctvs.filter(cctv => {
+                    return route.route.overview_path.some(point => {
+                        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                            new google.maps.LatLng(cctv.lat, cctv.lng),
+                            point
+                        );
+                        return distance < 50;
+                    });
+                });
+
+                if (cctvsOnRoute.length > maxCctvs) {
+                    maxCctvs = cctvsOnRoute.length;
+                    bestRoute = route;
+                }
+            });
+
+            return bestRoute;
+        }
+
+        function displayRoute(route) {
+            directionsRenderer.setDirections({
+                routes: [route.route]
+            });
+            if (routePolyline) {
+                routePolyline.setMap(null);
+            }
+            routePolyline = new google.maps.Polyline({
+                path: route.route.overview_path,
+                geodesic: true,
+                strokeColor: '#FF0000',
+                strokeOpacity: 1.0,
+                strokeWeight: 2
+            });
+            routePolyline.setMap(map);
+        }
+
+        function displayCctvsOnRoute(routePath) {
+            const cctvsOnRoute = cctvs.filter(cctv => {
+                return routePath.some(point => {
+                    const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                        new google.maps.LatLng(cctv.lat, cctv.lng),
+                        point
+                    );
+                    return distance < 50;
+                });
+            });
+
+            cctvMarkers.forEach(marker => marker.setMap(null));
+            cctvMarkers = [];
+
+            cctvsOnRoute.forEach(cctv => {
+                const position = new google.maps.LatLng(cctv.lat, cctv.lng);
+                const marker = new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    title: 'CCTV',
+                    icon: 'http://maps.google.com/mapfiles/ms/icons/purple-dot.png'  // CCTV 마커 보라색
+                });
+                cctvMarkers.push(marker);
+            });
+        }
+
+        window.addEventListener('load', function() {
+            initializeMap();
+        });
+    </script>
+</body>
+</html>
