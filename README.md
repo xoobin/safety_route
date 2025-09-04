@@ -3,5 +3,3 @@ django 웹 프레임워크 학습과 안전한 귀가 경로를 제안하는 웹
 
 (현재는 google maps API 사용 기간 만료로 실행 불가)
 
-*오류 상황을 대비하여 pythonanywhere 링크를 첨부합니다.
-https://kimsoobin.pythonanywhere.com/
