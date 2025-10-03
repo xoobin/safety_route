@@ -9,3 +9,5 @@ django 웹 프레임워크 학습과 안전한 귀가 경로를 제안하는 웹
 
 만일 활성화 갱신 기간이 지나 실행이 되지 않을 경우 pythonanywhere에서 웹사이트 재활성화 후 실행할 수 있습니다.
 
+**노션 링크**
+https://parallel-appliance-dda.notion.site/Safety-Route-1043fd1d44d24f298b9767c1114f270c
